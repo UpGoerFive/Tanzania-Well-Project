@@ -13,7 +13,7 @@ from sklearn.compose import ColumnTransformer
 #########################Valeria###########################
 
 
-
+4
 #########################Grace#############################
 
 
@@ -34,14 +34,19 @@ class Modeler:
     the Modeler will generate a default one from it's input data, so X and y must be given
     in that instance.
     """
-    def __init__(self, models={}, prep=None, X=None, y=None, log='model-run.log'):
+    def __init__(self, models={}, prep=None, X=pd.DataFrame(), y=pd.DataFrame(), log='model-run.log'):
         self._models=models
         self._preprocessor=prep
         self._log = log
 
+        for name in self._models:
+            self._models[name]['output'] = None
+            self._models[name]['fit_classifier'] = None
+            self._models[name]['time_ran'] = None
+
         logging.basicConfig(filename=log, level=logging.DEBUG)
 
-        if X and y:
+        if not X.empty and not y.empty:
             self._X_train, self._X_test, self._y_train, self._y_test = train_test_split(X, y, test_size=0.25, random_state = 829941045)
         else:
             self._X_train, self._X_test, self._y_train, self._y_test = None, None, None, None
@@ -93,11 +98,11 @@ class Modeler:
         """
         print(f"{name}: {self._models[name]}")
 
-    def train_model(self, name, X_train=None, y_train=None, print=True):
+    def train_model(self, name, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=True):
 
-        if not X_train:
+        if X_train.empty:
             X_train = self._X_train
-        if not y_train:
+        if y_train.empty:
             y_train = self._y_train
         model = self._models[name]
 
@@ -113,19 +118,19 @@ class Modeler:
         )
         logging.info(f"Cross validate scores for {name}: {model['output']}")
 
-    def train_all(self, X_train=None, y_train=None, print=False):
-        if not X_train:
+    def train_all(self, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=False):
+        if X_train.empty:
             X_train = self._X_train
-        if not y_train:
+        if y_train.empty:
             y_train = self._y_train
 
         for model in self._models:
             self.train_model(model, X_train, y_train)
 
-    def test_model(self, name, X_test=None, y_test=None, print=True):
-        if not X_test:
+    def test_model(self, name, X_test=pd.DataFrame(), y_test=pd.DataFrame(), print=True):
+        if X_test.empty:
             X_test = self._X_test
-        if not y_test:
+        if y_test.empty:
             y_test = self._y_test
         model = self._models[name]
 
@@ -137,10 +142,10 @@ class Modeler:
         model['test_output'] = model['fit_classifier'].score(X_test_processed, y_test)
         logging.info(f"{name} test score: {model['test_output']}")
 
-    def test_all(self, X_test=None, y_test=None, print=False):
-        if not X_test:
+    def test_all(self, X_test=pd.DataFrame(), y_test=pd.DataFrame(), print=False):
+        if X_test.empty:
             X_test = self._X_test
-        if not y_test:
+        if y_test.empty:
             y_test = self._y_test
 
         for model in self._models:
