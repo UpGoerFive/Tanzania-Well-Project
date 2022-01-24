@@ -1,3 +1,15 @@
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import logging
+from sklearnex import patch_sklearn
+patch_sklearn()
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.compose import ColumnTransformer
+
 #########################Valeria###########################
 
 
@@ -7,7 +19,134 @@
 
 
 #########################Nathaniel#########################
+class Modeler:
+    """
+    Modeling pipeline. It has basic defaults and can accept new models and transformers.
+    Models should be added in the form of:
 
-def cleaner(data):
-    pass
+    {'classifier': <classifier>,
+     'preprocessor': <preprocessor>}
+
+    preprocessor can be None if the default preprocessor is acceptable(Need to implement). This class also
+    logs model output to a default model-run.log file.
+
+    When instantiating the class, if the prep(default preprocessor) argument is left out,
+    the Modeler will generate a default one from it's input data, so X and y must be given
+    in that instance.
+    """
+    def __init__(self, models={}, prep=None, X=None, y=None, log='model-run.log'):
+        self._models=models
+        self._preprocessor=prep
+        self._log = log
+
+        logging.basicConfig(filename=log, level=logging.DEBUG)
+
+        if X and y:
+            self._X_train, self._X_test, self._y_train, self._y_test = train_test_split(X, y, test_size=0.25, random_state = 829941045)
+        else:
+            self._X_train, self._X_test, self._y_train, self._y_test = None, None, None, None
+
+        if not prep:
+            self._preprocessor = self.create_default_prep(X)
+            
+    def create_default_prep(self, X):
+        num_cols = X.select_dtypes(include=['int64', 'float64']).columns
+        cat_cols = X.select_dtypes(exclude=['int64', 'float64']).columns
+
+        numeric_transformer = Pipeline(
+            steps=[('imputer', SimpleImputer(strategy='median'))]
+        )
+
+        categorical_transformer = Pipeline(
+            steps=[('imputer', SimpleImputer(strategy='constant', fill_value='Missing'))]
+        )
+
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ("numeric", numeric_transformer, num_cols),
+                ("categorical", categorical_transformer, cat_cols)
+            ]
+        )
+
+        return preprocessor
+
+    def add_model(self, name, model):
+        """
+        Basic mechanism to add a model, model should provide classifier and preprocessor fields.
+        To Do: implement default preprocessor assignment.
+        """
+        self._models[name] = model
+        self._models[name]['output'] = None
+        self._models[name]['fit_classifier'] = None
+        self._models[name]['time_ran'] = None
+
+    def change_prep(self, name, prep):
+        """
+        Basic reassingment of preprocessor pipeline object.
+        """
+        self._models[name]['preprocessor'] = prep
+
+    def show_model(self, name):
+        """
+        Shows all model information.
+        To Do: add printing/logging options.
+        """
+        print(f"{name}: {self._models[name]}")
+
+    def train_model(self, name, X_train=None, y_train=None, print=True):
+
+        if not X_train:
+            X_train = self._X_train
+        if not y_train:
+            y_train = self._y_train
+        model = self._models[name]
+
+        X_train_processed = model['preprocessor'].fit_transform(X_train)
+
+        model['fit_classifier'] = model['classifier'].fit(X_train_processed, y_train)
+        logging.info(f"{name} has been fit.")
+
+        model['output'] = cross_val_score(
+            estimator=model['classifier'],
+            X=X_train_processed,
+            y=y_train
+        )
+        logging.info(f"Cross validate scores for {name}: {model['output']}")
+
+    def train_all(self, X_train=None, y_train=None, print=False):
+        if not X_train:
+            X_train = self._X_train
+        if not y_train:
+            y_train = self._y_train
+
+        for model in self._models:
+            self.train_model(model, X_train, y_train)
+
+    def test_model(self, name, X_test=None, y_test=None, print=True):
+        if not X_test:
+            X_test = self._X_test
+        if not y_test:
+            y_test = self._y_test
+        model = self._models[name]
+
+        X_test_processed = model['preprocessor'].transform(X_test)
+
+        if not model['fit_classifier']: # Should add auto train fitting
+            raise Exception("This model has not been fit yet.")
+
+        model['test_output'] = model['fit_classifier'].score(X_test_processed, y_test)
+        logging.info(f"{name} test score: {model['test_output']}")
+
+    def test_all(self, X_test=None, y_test=None, print=False):
+        if not X_test:
+            X_test = self._X_test
+        if not y_test:
+            y_test = self._y_test
+
+        for model in self._models:
+            self.test_model(model, X_test, y_test)
+
+    def plot_models(self):
+        """Skylar slide style."""
+        pass
 
