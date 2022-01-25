@@ -13,12 +13,31 @@ from sklearn.compose import ColumnTransformer
 #########################Valeria###########################
 
 
-4
+
 #########################Grace#############################
 
 
 
 #########################Nathaniel#########################
+# logger = logging.getLogger()
+
+# # Create handlers
+# c_handler = logging.StreamHandler()
+# f_handler = logging.FileHandler('model-run.log')
+# c_handler.setLevel(logging.DEBUG)
+# f_handler.setLevel(logging.DEBUG)
+
+# # Create formatters and add it to handlers
+# c_format = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
+# f_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# c_handler.setFormatter(c_format)
+# f_handler.setFormatter(f_format)
+
+# # Add handlers to the logger
+# logger.addHandler(c_handler)
+# logger.addHandler(f_handler)
+# logger.info("Logger set up")
+
 class Modeler:
     """
     Modeling pipeline. It has basic defaults and can accept new models and transformers.
@@ -37,14 +56,11 @@ class Modeler:
     def __init__(self, models={}, prep=None, X=pd.DataFrame(), y=pd.DataFrame(), log='model-run.log'):
         self._models=models
         self._preprocessor=prep
-        self._log = log
 
         for name in self._models:
             self._models[name]['output'] = None
             self._models[name]['fit_classifier'] = None
             self._models[name]['time_ran'] = None
-
-        logging.basicConfig(filename=log, level=logging.DEBUG)
 
         if not X.empty and not y.empty:
             self._X_train, self._X_test, self._y_train, self._y_test = train_test_split(X, y, test_size=0.25, random_state = 829941045)
@@ -109,14 +125,14 @@ class Modeler:
         X_train_processed = model['preprocessor'].fit_transform(X_train)
 
         model['fit_classifier'] = model['classifier'].fit(X_train_processed, y_train)
-        logging.info(f"{name} has been fit.")
+        #logger.info(f"{name} has been fit.")
 
         model['output'] = cross_val_score(
             estimator=model['classifier'],
             X=X_train_processed,
             y=y_train
         )
-        logging.info(f"Cross validate scores for {name}: {model['output']}")
+        #logger.info(f"Cross validate scores for {name}: {model['output']}")
 
     def train_all(self, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=False):
         if X_train.empty:
@@ -140,7 +156,7 @@ class Modeler:
             raise Exception("This model has not been fit yet.")
 
         model['test_output'] = model['fit_classifier'].score(X_test_processed, y_test)
-        logging.info(f"{name} test score: {model['test_output']}")
+        #logger.info(f"{name} test score: {model['test_output']}")
 
     def test_all(self, X_test=pd.DataFrame(), y_test=pd.DataFrame(), print=False):
         if X_test.empty:
