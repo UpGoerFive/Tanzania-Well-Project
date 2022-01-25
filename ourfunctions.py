@@ -8,7 +8,7 @@ from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.compose import ColumnTransformer
+from sklearn.compose import ColumnTransformer, make_column_selector
 
 #########################Valeria###########################
 
@@ -75,9 +75,6 @@ class Modeler:
             self._preprocessor = self.create_default_prep(X)
             
     def create_default_prep(self, X):
-        num_cols = X.select_dtypes(include=['int64', 'float64']).columns
-        cat_cols = X.select_dtypes(exclude=['int64', 'float64']).columns
-
         numeric_transformer = Pipeline(
             steps=[('imputer', SimpleImputer(strategy='median'))]
         )
@@ -88,8 +85,8 @@ class Modeler:
 
         preprocessor = ColumnTransformer(
             transformers=[
-                ("numeric", numeric_transformer, num_cols),
-                ("categorical", categorical_transformer, cat_cols)
+                ("numeric", numeric_transformer, make_column_selector(dtype_include=np.number)),
+                ("categorical", categorical_transformer, make_column_selector(dtype_exclude=np.number))
             ]
         )
 
