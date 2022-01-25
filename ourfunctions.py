@@ -62,7 +62,6 @@ class Modeler:
                 self._models[name]['preprocessor'] = self.create_default_prep()
             self._models[name]['output'] = None
             self._models[name]['fit_classifier'] = None
-            self._models[name]['time_ran'] = None
 
         if not X.empty and not y.empty:
             self._X_train, self._X_test, self._y_train, self._y_test = train_test_split(X, y, test_size=0.25, random_state = 829941045)
@@ -73,7 +72,7 @@ class Modeler:
         def to_object(x):
             return pd.DataFrame(x).astype(str)
 
-        fun_tr = FunctionTransformer(to_object)
+        string_transformer = FunctionTransformer(to_object)
 
         numeric_transformer = Pipeline(
             steps=[('imputer', SimpleImputer(strategy='median'))]
@@ -81,7 +80,7 @@ class Modeler:
 
         categorical_transformer = Pipeline(
             steps=[('imputer', SimpleImputer(strategy='constant', fill_value='Missing')),
-                ('casting', fun_tr),
+                ('casting', string_transformer),
                 ('one_hot_encode', OneHotEncoder(handle_unknown='ignore'))]
         )
         preprocessor = ColumnTransformer(
@@ -105,7 +104,6 @@ class Modeler:
         self._models[name] = model
         self._models[name]['output'] = None
         self._models[name]['fit_classifier'] = None
-        self._models[name]['time_ran'] = None
 
     def remove_model(self, name):
         del self._models[name]
@@ -150,6 +148,7 @@ class Modeler:
             y=y_train
         )
         logger.info(f"Cross validate scores for {name}: {model['output']}")
+        self._models[name]['time_trained'] = '%(asctime)s'
 
         if print:
             logger.removeHandler(c_handler)
@@ -208,15 +207,39 @@ class Modeler:
         for model in self._models:
             self.test_model(model, X_test, y_test, print)
 
-    def hyper_search(self, name, searcher=RandomizedSearchCV, params=None, print=False):
+    def hyper_search(self, name, searcher=RandomizedSearchCV, params=None, searcher_kwargs=None, print=False, ):
         """
         Hyper parameter tuning function, defaults to RandomizedSearchCV, but any search function
-        you want can be passed in.
+        you want can be passed in. searcher_kwargs should be a dictionary of the keyword argument you want to pass
+        to the search object:
+
+            searcher_kwargs = {'n_jobs': 3, 'refit': True, 'cv': 10}
+
+        The keys need to be the exact arguments of the object. Note that this should not include things like 
+        param_distributions, as this should be filled in the params argument.
         """
         if print:
             logger.addHandler(c_handler)
 
+        if not params and 'param_distro' in self._models[name].keys():
+            params = self._models[name]['param_distro']
+        elif params:
+            self._models[name]['param_distro'] = params
+
+        if searcher_kwargs:
+            search_object = searcher(self._models[name]['classifier'], params, **searcher_kwargs)
+        else:
+            search_object = searcher(self._models[name]['classifier'], params)
         
+        X_train_processed = self._models[name]['preprocessor'].fit_transform(self._X_train)
+        search_object.fit(X_train_processed, np.array(self._y_train).ravel())
+        logger.info(f"For model {name}, {searcher} with{params} produced:")
+        logger.info(f"Params: {search_object.best_params_}")
+        logger.info(f"{search_object.best_score_}" if 'refit' not in searcher_kwargs.keys() else "refit = False")
+
+        self._models[name]['search_classifier'] = search_object.best_estimator_ if 'refit' not in searcher_kwargs.keys() else None
+        self._models[name]['search_best_params'] = search_object.best_params_
+        self._models[name]['search_performed_at'] = '%(asctime)s'
 
         if print:
             logger.removeHandler(c_handler)
