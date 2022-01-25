@@ -68,21 +68,40 @@ class Modeler:
         else:
             self._X_train, self._X_test, self._y_train, self._y_test = None, None, None, None
 
-    def create_default_prep(self):
+    def create_default_prep(self, cat_add=None, num_add=None):
+        """
+        Creates a default preprocessing object, uses all columns and imputes with median for numeric and 'missing' for categorical.
+        Can accept extra steps with cat_add and num_add, which must be lists of tuples (steps). Currently only adds them to the order.
+        """
         def to_object(x):
             return pd.DataFrame(x).astype(str)
 
         string_transformer = FunctionTransformer(to_object)
 
-        numeric_transformer = Pipeline(
-            steps=[('imputer', SimpleImputer(strategy='median'))]
-        )
+        if num_add:
+            numeric_transformer = Pipeline(
+                steps=[('imputer', SimpleImputer(strategy='median')),
+                        *num_add]
+            )
+        else:
+            numeric_transformer = Pipeline(
+                steps=[('imputer', SimpleImputer(strategy='median'))]
+            )
 
-        categorical_transformer = Pipeline(
-            steps=[('imputer', SimpleImputer(strategy='constant', fill_value='Missing')),
-                ('casting', string_transformer),
-                ('one_hot_encode', OneHotEncoder(handle_unknown='ignore'))]
-        )
+        if cat_add:
+            categorical_transformer = Pipeline(
+                steps=[('imputer', SimpleImputer(strategy='constant', fill_value='Missing')),
+                    ('casting', string_transformer),
+                    ('one_hot_encode', OneHotEncoder(handle_unknown='ignore')),
+                    *cat_add]
+            )
+        else:
+            categorical_transformer = Pipeline(
+                steps=[('imputer', SimpleImputer(strategy='constant', fill_value='Missing')),
+                    ('casting', string_transformer),
+                    ('one_hot_encode', OneHotEncoder(handle_unknown='ignore'))]
+            )
+
         preprocessor = ColumnTransformer(
                             transformers=[
                                 ("numeric", numeric_transformer, make_column_selector(dtype_include=np.number)),
@@ -106,6 +125,9 @@ class Modeler:
         self._models[name]['fit_classifier'] = None
 
     def remove_model(self, name):
+        """
+        Files your taxes.
+        """
         del self._models[name]
 
     def change_prep(self, name, prep):
