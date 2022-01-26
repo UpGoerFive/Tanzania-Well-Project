@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import logging
+import time
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
@@ -170,7 +171,7 @@ class Modeler:
             y=y_train
         )
         logger.info(f"Cross validate scores for {name}: {model['output']}")
-        self._models[name]['time_trained'] = '%(asctime)s'
+        self._models[name]['time_trained'] = time.asctime()
 
         if print:
             logger.removeHandler(c_handler)
@@ -261,7 +262,7 @@ class Modeler:
 
         self._models[name]['search_classifier'] = search_object.best_estimator_ if 'refit' not in searcher_kwargs.keys() else None
         self._models[name]['search_best_params'] = search_object.best_params_
-        self._models[name]['search_performed_at'] = '%(asctime)s'
+        self._models[name]['search_performed_at'] = time.asctime()
 
         if print:
             logger.removeHandler(c_handler)
