@@ -4,14 +4,14 @@ import seaborn as sns
 import logging
 import time
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
+from sklearn.preprocessing import OneHotEncoder, FunctionTransformer, LabelEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 # Current version of sklearn is still too old I think, might try to upgrade to use below option
 # from sklearn.experimental import enable_halving_search_cv
 from sklearn.model_selection import train_test_split, cross_val_score, RandomizedSearchCV# ,  HalvingRandomSearchCV
 from sklearn.compose import ColumnTransformer, make_column_selector
-
+import sklearn.metrics as metrics
 #########################Valeria###########################
 
 
@@ -62,13 +62,15 @@ class Modeler:
         for name in self._models:
             if not self._models[name]['preprocessor']:
                 self._models[name]['preprocessor'] = self.create_default_prep()
-            self._models[name]['output'] = None
             self._models[name]['fit_classifier'] = None
 
         if not X.empty and not y.empty:
-            self._X_train, self._X_test, self._y_train, self._y_test = train_test_split(X, y, test_size=0.25, random_state = 829941045)
+            self._le = LabelEncoder()
+            self._X_train, self._X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state = 829941045)
+            self._y_train = pd.DataFrame(self._le.fit_transform(y_train.iloc[:, 1]))
+            self._y_test = pd.DataFrame(self._le.transform(y_test.iloc[:, 1]))
         else:
-            self._X_train, self._X_test, self._y_train, self._y_test = None, None, None, None
+            raise Exception('X and y should be provided at start.')
 
     def create_default_prep(self, cat_add=None, num_add=None):
         """
@@ -123,7 +125,6 @@ class Modeler:
                 model['preprocessor'] = self.create_default_prep()
 
         self._models[name] = model
-        self._models[name]['output'] = None
         self._models[name]['fit_classifier'] = None
 
     def remove_model(self, name):
@@ -154,7 +155,7 @@ class Modeler:
     def train_model(self, name, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=True, cv=True, train=True):
         """
         Train a single model. Fits all preprocessing transformers for later testing.
-        Records and outputs cross validate scores. The cv_only option determines if the method will 
+        Records and outputs cross validate scores. The cv_only option determines if the method will
         fit a classifier, which is required before testing. Optional printing ability.
         """
         if print:
@@ -170,16 +171,17 @@ class Modeler:
 
         if train:
             model['fit_classifier'] = model['classifier'].fit(X_train_processed, y_train)
+            model['train_output'] = model['fit_classifier'].score(X_train_processed, y_train)
             logger.info(f"{name} has been fit.")
             self._models[name]['time_fit'] = time.asctime()
 
         if cv:
-            model['output'] = cross_val_score(
+            model['cv_output'] = cross_val_score(
                 estimator=model['classifier'],
                 X=X_train_processed,
                 y=y_train
             )
-            logger.info(f"Cross validate scores for {name}: {model['output']}")
+            logger.info(f"Cross validate scores for {name}: {model['cv_output']}")
             self._models[name]['time_cross_val'] = time.asctime()
 
         if print:
@@ -188,14 +190,14 @@ class Modeler:
     def train_all(self, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=False, cv=True, train=True):
         """
         Train all available models. Fits all preprocessing transformers for later testing.
-        Records and outputs cross validate scores. The cv_only option determines if the method will 
+        Records and outputs cross validate scores. The cv_only option determines if the method will
         fit a classifier, which is required before testing. Optional printing ability.
         """
 
         if X_train.empty:
             X_train = self._X_train
         if y_train.empty:
-            y_train = self._y_train
+            y_train = np.array(self._y_train).ravel()
 
         for model in self._models:
             self.train_model(model, X_train, y_train, print, cv, train)
@@ -235,7 +237,7 @@ class Modeler:
         if X_test.empty:
             X_test = self._X_test
         if y_test.empty:
-            y_test = self._y_test
+            y_test = np.array(self._y_test).ravel()
 
         for model in self._models:
             self.test_model(model, X_test, y_test, print)
@@ -248,7 +250,7 @@ class Modeler:
 
             searcher_kwargs = {'n_jobs': 3, 'refit': True, 'cv': 10}
 
-        The keys need to be the exact arguments of the object. Note that this should not include things like 
+        The keys need to be the exact arguments of the object. Note that this should not include things like
         param_distributions, as this should be filled in the params argument.
         """
         if print:
@@ -263,7 +265,7 @@ class Modeler:
             search_object = searcher(self._models[name]['classifier'], params, **searcher_kwargs)
         else:
             search_object = searcher(self._models[name]['classifier'], params)
-        
+
         X_train_processed = self._models[name]['preprocessor'].fit_transform(self._X_train)
         search_object.fit(X_train_processed, np.array(self._y_train).ravel())
         logger.info(f"For model {name}, {searcher} with{params} produced:")
@@ -300,6 +302,87 @@ class Modeler:
         # return pd.DataFrame.sparse.from_spmatrix(processed), processed.shape if not shape_only else processed.shape
         return processed.shape
 
+    def model_evaluation(self, name, normalize="true", cmap="Purples", label=""):
+        """
+        Evaluates a classifier model by providing
+            [1] Metrics including accuracy and cross validation score.
+            [2] Classification report
+            [3] Confusion Matrix
+        Args:
+            name (string): classifier model name
+            normalize (str): "true" if normalize confusion matrix annotated values.
+            cmap (str): color map for the confusion matrix
+            label (str): name of the classifier.
+        Returns:
+            report: classfication report
+            fig, ax: matplotlib object
+        """
+
+        # If the model hasn't been trained and tested yet, let's do that.
+        if 'test_output' not in self._models[name].keys() or 'train_output' not in self._models[name].keys():
+            self.train_model(name, print=False)
+            self.test_model(name, print=False)
+
+        model = self._models[name]
+        model_pipeline = Pipeline(steps=[('preprocessor', self._models[name]['preprocessor']),
+                                    ('classifier', self._models[name]['fit_classifier'])])
+
+        X_train = self._X_train
+        X_test = self._X_test
+        y_train = np.array(self._y_train).ravel()
+        y_test = np.array(self._y_test).ravel()
+        model_pipeline.fit(X_train, y_train)
+
+        ## Get Predictions
+        y_hat_test = model_pipeline.predict(X_test)
+
+        ## Classification Report / Scores
+        table_header = "[i] CLASSIFICATION REPORT"    ## Add Label if given
+        if len(label)>0:
+            table_header += f" {label}"
+        ## PRINT CLASSIFICATION REPORT
+        dashes = "---"*20
+        print(dashes,table_header,dashes,sep="\n")
+        print("Train Accuracy : ", round(self._models[name]['train_output'],4))
+        print("Test Accuracy : ", round(self._models[name]['test_output'],4))
+
+        if 'cv_output' in model.keys():
+            print('CV score (n=5)', round(np.mean(self._models[name]['cv_output']), 4))
+        print(dashes+"\n")
+
+        y_label_test = self._le.inverse_transform(y_test)
+        y_label_hat_test = self._le.inverse_transform(y_hat_test)
+        print(metrics.classification_report(y_label_test, y_label_hat_test, target_names=self._le.classes_))
+        model['report'] = metrics.classification_report(y_label_test, y_label_hat_test, target_names=self._le.classes_, output_dict=True)
+        print(dashes+"\n\n")
+        ## MAKE FIGURE
+        fig, ax = plt.subplots(figsize=(10,4))
+        ax.grid(False)
+        ## Plot Confusion Matrix
+        metrics.plot_confusion_matrix(model_pipeline, X_test,y_test,
+                                    display_labels=self._le.classes_,
+                                    normalize=normalize,
+                                    cmap=cmap,ax=ax)
+        ax.set(title="Confusion Matrix")
+        plt.xticks(rotation=45)
+        plt.show()
+        return fig, ax
+
+    def feature_importance(self):
+        pass
+        # if feature_importance:
+        # # Feature Importance
+        #     fig, ax = plt.subplots(figsize=(10,4))
+        # # get features if not given
+        # if features is None:
+        #     features = X_train.keys()
+        #     feat_imp = pd.Series(model_pipeline.feature_importances_, index=features).sort_values(ascending=False)[:10]
+        # feat_imp.plot(kind="barh", title="Feature Importances")
+        # ax.set(ylabel="Feature Importance Score")
+        # ax.invert_yaxis()
+
+    def permutation_importance(self):
+        pass
 
     def plot_models(self, sns_style='darkgrid', sns_context='talk', palette='coolwarm', save=None):
         """
@@ -334,7 +417,6 @@ class Modeler:
 
         if save:
             plt.savefig(save)
-        
+
         logger.addHandler(c_handler)
         logger.addHandler(f_handler)
-
