@@ -281,6 +281,25 @@ class Modeler:
         if print:
             logger.removeHandler(c_handler)
 
+    def check_preprocessor(self, name, train=True, fit=True, shape_only=False):
+        """
+        Checks how your preprocessor is transforming your data. Defaults to fitting and transforming X train,
+        but can also just transform X train or X test. If fit or train is set to False, the preprocessor must already
+        be fitted.
+        """
+        model = self._models[name]
+
+        if train and fit:
+            processed = model['preprocessor'].fit_transform(self._X_train)
+        elif train:
+            processed = model['preprocessor'].transform(self._X_train)
+        else:
+            processed = model['preprocessor'].transform(self._X_test)
+
+        # Fix and implement later
+        # return pd.DataFrame.sparse.from_spmatrix(processed), processed.shape if not shape_only else processed.shape
+        return processed.shape
+
 
     def plot_models(self, sns_style='darkgrid', sns_context='talk', palette='coolwarm', save=None):
         """
