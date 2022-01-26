@@ -3,6 +3,7 @@ import numpy as np
 import seaborn as sns
 import logging
 import time
+import matplotlib.pyplot as plt
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
@@ -144,7 +145,13 @@ class Modeler:
         """
         print(f"{name}: {self._models[name]}")
 
-    def train_model(self, name, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=True, cv_only=False):
+    def get_model(self, name):
+        """
+        Access a model to use.
+        """
+        return self._models[name]
+
+    def train_model(self, name, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=True, cv=True, train=True):
         """
         Train a single model. Fits all preprocessing transformers for later testing.
         Records and outputs cross validate scores. The cv_only option determines if the method will 
@@ -161,22 +168,24 @@ class Modeler:
 
         X_train_processed = model['preprocessor'].fit_transform(X_train)
 
-        if not cv_only:
+        if train:
             model['fit_classifier'] = model['classifier'].fit(X_train_processed, y_train)
             logger.info(f"{name} has been fit.")
+            self._models[name]['time_fit'] = time.asctime()
 
-        model['output'] = cross_val_score(
-            estimator=model['classifier'],
-            X=X_train_processed,
-            y=y_train
-        )
-        logger.info(f"Cross validate scores for {name}: {model['output']}")
-        self._models[name]['time_trained'] = time.asctime()
+        if cv:
+            model['output'] = cross_val_score(
+                estimator=model['classifier'],
+                X=X_train_processed,
+                y=y_train
+            )
+            logger.info(f"Cross validate scores for {name}: {model['output']}")
+            self._models[name]['time_cross_val'] = time.asctime()
 
         if print:
             logger.removeHandler(c_handler)
 
-    def train_all(self, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=False, cv_only=False):
+    def train_all(self, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=False, cv=True, train=True):
         """
         Train all available models. Fits all preprocessing transformers for later testing.
         Records and outputs cross validate scores. The cv_only option determines if the method will 
@@ -189,7 +198,7 @@ class Modeler:
             y_train = self._y_train
 
         for model in self._models:
-            self.train_model(model, X_train, y_train, print, cv_only)
+            self.train_model(model, X_train, y_train, print, cv, train)
 
     def test_model(self, name, X_test=pd.DataFrame(), y_test=pd.DataFrame(), print=True):
         """
@@ -211,6 +220,7 @@ class Modeler:
             raise Exception("This model has not been fit yet.")
 
         model['test_output'] = model['fit_classifier'].score(X_test_processed, y_test)
+        self._models[name]['time_tested'] = time.asctime()
         logger.info(f"{name} test score: {model['test_output']}")
 
         if print:
@@ -266,12 +276,46 @@ class Modeler:
 
         if set_to_train:
             self._models[name]['fit_classifier'] = search_object.best_estimator_
+            self._models[name]['time_fit'] = time.asctime()
 
         if print:
             logger.removeHandler(c_handler)
 
 
-    def plot_models(self):
-        """Skylar slide style."""
-        pass
+    def plot_models(self, sns_style='darkgrid', sns_context='talk', palette='coolwarm', save=None):
+        """
+        Skylar slide style, with thanks to Matt. Has options for seaborn plotting. If you want to save the plot,
+        give the save option a filename, exactly as would be done with plt.savefig()
+        """
+        logger.removeHandler(c_handler)
+        logger.removeHandler(f_handler)
+
+        xticklabels = list(self._models.keys())
+        y = [model['test_output'] for model in self._models.values()]
+
+        sns.set_style(sns_style)
+        sns.set_context(sns_context)
+        fig, ax = plt.subplots(figsize=(20, 10))
+
+        fig.set_tight_layout(True)
+
+        sns.barplot(x=xticklabels, y=y, palette=palette)
+        ax.set(ylim=(0, 1))
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, horizontalalignment='right')
+
+        # ax2 = ax.twinx()
+        # sns.lineplot(x=xticklabels, y=x_error, linewidth=5)
+        # ax2.set(ylim=(0, 300000))
+        # ax2.set_yticks(np.linspace(0,300000,num=6))
+        # ax2.set_yticklabels(np.linspace(0,300,num=6,dtype=int))
+
+        ax.set_ylabel('Accuracy Score')
+        # ax2.set_ylabel('Error, USD (thousands)')
+        ax.set_title('Model Effectiveness');
+
+        if save:
+            plt.savefig(save)
+        
+        logger.addHandler(c_handler)
+        logger.addHandler(f_handler)
 
