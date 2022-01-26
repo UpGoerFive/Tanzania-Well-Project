@@ -230,7 +230,7 @@ class Modeler:
         for model in self._models:
             self.test_model(model, X_test, y_test, print)
 
-    def hyper_search(self, name, searcher=RandomizedSearchCV, params=None, searcher_kwargs=None, print=False, ):
+    def hyper_search(self, name, searcher=RandomizedSearchCV, params=None, searcher_kwargs=None, print=False, set_to_train=False):
         """
         Hyper parameter tuning function, defaults to RandomizedSearchCV, but any search function
         you want can be passed in. searcher_kwargs should be a dictionary of the keyword argument you want to pass
@@ -263,6 +263,9 @@ class Modeler:
         self._models[name]['search_classifier'] = search_object.best_estimator_ if 'refit' not in searcher_kwargs.keys() else None
         self._models[name]['search_best_params'] = search_object.best_params_
         self._models[name]['search_performed_at'] = time.asctime()
+
+        if set_to_train:
+            self._models[name]['fit_classifier'] = search_object.best_estimator_
 
         if print:
             logger.removeHandler(c_handler)
