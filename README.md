@@ -8,4 +8,5 @@ The hope is that by gaining a better understanding of the factors that impact wa
 
 ## Data 
 The data that was used to train our models was provided by Taarifa and the Tanzanian Ministry of Water. You may also able to download the datasets from https://www.drivendata.org/competitions/7/pump-it-up-data-mining-the-water-table/page/23/.
-![image](https://user-images.githubusercontent.com/93217519/151245079-37e69f99-521c-42b0-8c62-4c11f040aff4.png)
+
+![image](https://user-images.githubusercontent.com/93217519/151245497-d159055d-ffff-4ba1-9464-e8623e635533.png)
