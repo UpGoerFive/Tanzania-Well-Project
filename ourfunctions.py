@@ -12,6 +12,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split, cross_val_score, RandomizedSearchCV# ,  HalvingRandomSearchCV
 from sklearn.compose import ColumnTransformer, make_column_selector
 import sklearn.metrics as metrics
+from sklearn.inspection import permutation_importance
 #########################Valeria###########################
 
 
@@ -67,8 +68,8 @@ class Modeler:
         if not X.empty and not y.empty:
             self._le = LabelEncoder()
             self._X_train, self._X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state = 829941045)
-            self._y_train = pd.DataFrame(self._le.fit_transform(y_train.iloc[:, 1]))
-            self._y_test = pd.DataFrame(self._le.transform(y_test.iloc[:, 1]))
+            self._y_train = self._le.fit_transform(y_train.iloc[:, 1])
+            self._y_test = self._le.transform(y_test.iloc[:, 1])
         else:
             raise Exception('X and y should be provided at start.')
 
@@ -126,6 +127,8 @@ class Modeler:
 
         self._models[name] = model
         self._models[name]['fit_classifier'] = None
+        self._models[name]['model_pipeline'] = Pipeline(steps=[('preprocessor', self._models[name]['preprocessor']),
+                                                                ('classifier', self._models[name]['classifier'])])
 
     def remove_model(self, name):
         """
@@ -152,7 +155,7 @@ class Modeler:
         """
         return self._models[name]
 
-    def train_model(self, name, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=True, cv=True, train=True):
+    def train_model(self, name, print=True, cv=True, train=True):
         """
         Train a single model. Fits all preprocessing transformers for later testing.
         Records and outputs cross validate scores. The cv_only option determines if the method will
@@ -161,10 +164,8 @@ class Modeler:
         if print:
             logger.addHandler(c_handler)
 
-        if X_train.empty:
-            X_train = self._X_train
-        if y_train.empty:
-            y_train = np.array(self._y_train).ravel()
+        X_train = self._X_train
+        y_train = self._y_train
         model = self._models[name]
 
         X_train_processed = model['preprocessor'].fit_transform(X_train)
@@ -187,22 +188,17 @@ class Modeler:
         if print:
             logger.removeHandler(c_handler)
 
-    def train_all(self, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=False, cv=True, train=True):
+    def train_all(self, print=False, cv=True, train=True):
         """
         Train all available models. Fits all preprocessing transformers for later testing.
         Records and outputs cross validate scores. The cv_only option determines if the method will
         fit a classifier, which is required before testing. Optional printing ability.
         """
 
-        if X_train.empty:
-            X_train = self._X_train
-        if y_train.empty:
-            y_train = np.array(self._y_train).ravel()
-
         for model in self._models:
-            self.train_model(model, X_train, y_train, print, cv, train)
+            self.train_model(model, print, cv, train)
 
-    def test_model(self, name, X_test=pd.DataFrame(), y_test=pd.DataFrame(), print=True):
+    def test_model(self, name, print=True):
         """
         Test a single model. Uses already fitted preprocessor pipeline and classifier.
         Raises an exception if there is no fit classifier for the model. Optional printing.
@@ -210,10 +206,8 @@ class Modeler:
         if print:
             logger.addHandler(c_handler)
 
-        if X_test.empty:
-            X_test = self._X_test
-        if y_test.empty:
-            y_test = np.array(self._y_test).ravel()
+        X_test = self._X_test
+        y_test = self._y_test
         model = self._models[name]
 
         X_test_processed = model['preprocessor'].transform(X_test)
@@ -228,19 +222,14 @@ class Modeler:
         if print:
             logger.removeHandler(c_handler)
 
-    def test_all(self, X_test=pd.DataFrame(), y_test=pd.DataFrame(), print=False):
+    def test_all(self, print=False):
         """
         Test all available models. Uses already fitted preprocessor pipelines and classifiers.
         Raises an exception if there is no fit classifier for a model. Optional printing.
         """
 
-        if X_test.empty:
-            X_test = self._X_test
-        if y_test.empty:
-            y_test = np.array(self._y_test).ravel()
-
         for model in self._models:
-            self.test_model(model, X_test, y_test, print)
+            self.test_model(model, print)
 
     def hyper_search(self, name, searcher=RandomizedSearchCV, params=None, searcher_kwargs=None, print=False, set_to_train=False):
         """
@@ -267,7 +256,7 @@ class Modeler:
             search_object = searcher(self._models[name]['classifier'], params)
 
         X_train_processed = self._models[name]['preprocessor'].fit_transform(self._X_train)
-        search_object.fit(X_train_processed, np.array(self._y_train).ravel())
+        search_object.fit(X_train_processed, self._y_train)
         logger.info(f"For model {name}, {searcher} with{params} produced:")
         logger.info(f"Params: {search_object.best_params_}")
         logger.info(f"{search_object.best_score_}" if 'refit' not in searcher_kwargs.keys() else "refit = False")
@@ -327,11 +316,8 @@ class Modeler:
         model_pipeline = Pipeline(steps=[('preprocessor', self._models[name]['preprocessor']),
                                     ('classifier', self._models[name]['fit_classifier'])])
 
-        X_train = self._X_train
         X_test = self._X_test
-        y_train = np.array(self._y_train).ravel()
-        y_test = np.array(self._y_test).ravel()
-        model_pipeline.fit(X_train, y_train)
+        y_test = self._y_test
 
         ## Get Predictions
         y_hat_test = model_pipeline.predict(X_test)
@@ -368,21 +354,23 @@ class Modeler:
         plt.show()
         return fig, ax
 
-    def feature_importance(self):
-        pass
-        # if feature_importance:
-        # # Feature Importance
-        #     fig, ax = plt.subplots(figsize=(10,4))
-        # # get features if not given
-        # if features is None:
-        #     features = X_train.keys()
-        #     feat_imp = pd.Series(model_pipeline.feature_importances_, index=features).sort_values(ascending=False)[:10]
-        # feat_imp.plot(kind="barh", title="Feature Importances")
-        # ax.set(ylabel="Feature Importance Score")
-        # ax.invert_yaxis()
+    def permutation_importance(self, name, train=False, perm_kwargs=None):
+        """Graphs and returns permutation importance of a model. Can be run on test or train data."""
+        model = self._models[name]
+        model_pipeline = Pipeline(steps=[('preprocessor', self._models[name]['preprocessor']),
+                                    ('classifier', self._models[name]['fit_classifier'])])
 
-    def permutation_importance(self):
-        pass
+        X_val, y_val = (self._X_train, self._y_train) if train else (self._X_test, self._y_test)
+
+        model_permuter = permutation_importance(model_pipeline, X_val, y_val, **perm_kwargs) if perm_kwargs else permutation_importance(model_pipeline, X_val, y_val)
+        model['permuter'] = model_permuter
+
+        # Plotting
+        fig, ax = plt.subplots(figsize=(10,4))
+        perm_imp = pd.Series(model_permuter.importances_mean, index=X_val.columns).sort_values(ascending=False)[:10]
+        perm_imp.plot(kind="barh", title="Permutation Importances")
+        ax.set(ylabel="Mean Permutation Importance Score")
+        ax.invert_yaxis()
 
     def plot_models(self, sns_style='darkgrid', sns_context='talk', palette='coolwarm', save=None):
         """
