@@ -23,13 +23,13 @@ from sklearn.inspection import permutation_importance
 
 #########################Nathaniel#########################
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # Create handlers
 c_handler = logging.StreamHandler()
 f_handler = logging.FileHandler('model-run.log')
-c_handler.setLevel(logging.DEBUG)
-f_handler.setLevel(logging.DEBUG)
+c_handler.setLevel(logging.INFO)
+f_handler.setLevel(logging.INFO)
 
 # Create formatters and add it to handlers
 c_format = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
@@ -354,8 +354,12 @@ class Modeler:
         plt.show()
         return fig, ax
 
-    def permutation_importance(self, name, train=False, perm_kwargs=None):
-        """Graphs and returns permutation importance of a model. Can be run on test or train data."""
+    def permutation_importance(self, name, train=False, perm_kwargs=None, save_graph=None):
+        """
+        Graphs and returns permutation importance of a model. Can be run on test or train data with the train
+        option. If providing perm_kwargs, they should be in a dictionary of keys that correspond to the
+        permutation importance function parameters.
+        """
         model = self._models[name]
         model_pipeline = Pipeline(steps=[('preprocessor', self._models[name]['preprocessor']),
                                     ('classifier', self._models[name]['fit_classifier'])])
@@ -371,6 +375,10 @@ class Modeler:
         perm_imp.plot(kind="barh", title="Permutation Importances")
         ax.set(ylabel="Mean Permutation Importance Score")
         ax.invert_yaxis()
+
+        if save_graph:
+            plt.savefig(save_graph)
+        logger.info(f"Model {name} has permutation importances of {perm_imp}")
 
     def plot_models(self, sns_style='darkgrid', sns_context='talk', palette='coolwarm', save=None):
         """
