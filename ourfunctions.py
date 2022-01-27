@@ -23,13 +23,13 @@ from sklearn.inspection import permutation_importance
 
 #########################Nathaniel#########################
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # Create handlers
 c_handler = logging.StreamHandler()
 f_handler = logging.FileHandler('model-run.log')
-c_handler.setLevel(logging.DEBUG)
-f_handler.setLevel(logging.DEBUG)
+c_handler.setLevel(logging.INFO)
+f_handler.setLevel(logging.INFO)
 
 # Create formatters and add it to handlers
 c_format = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
