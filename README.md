@@ -1,6 +1,6 @@
 # Tanzania Well Project
 
-Tanzania is a country located in Eastern Africa with a population of about 59,678,000 people. Access to water remains a major challenge in Tanzania especially in its rural villages. The hope is that by predicting the functional status of wells, we can maintain the existing systems and identify the neglected as well as the development of new delivery mechanisms.
+Tanzania is located in Eastern Africa with a population of about 59,678,000 people. Access to water remains a major challenge in Tanzania especially in its rural villages. The hope is that by predicting the functional status of wells, Tanzania can maintain the existing systems and identify the neglected wells as well as the development of new water delivery mechanisms.
 
 ## Business Problem
 
@@ -9,10 +9,18 @@ The purpose of this project is to use Machine Learning Classification models to 
 The hope is that by gaining a better understanding of the factors that impact water wells, we are able to improve maintenance and ensure all wells stay functional.  The importance of having accessibility of water for these Tanzanian communities is that it decreases diseases, increases education, and increases the economy overall.
 
 ## Data
-The data that was used to train our models was provided by Taarifa and the Tanzanian Ministry of Water. You may also able to download the datasets [here](https://www.drivendata.org/competitions/7/pump-it-up-data-mining-the-water-table/page/23/). This is a large dataset of around fifty thousand entries, with forty features to use in prediction.
+The data that was used to train our models was provided by Taarifa and the Tanzanian Ministry of Water. 
+The data sets are as follow:
+- Training-set-values: 59,400 observations, 40 variables
+- Training-set-labels: 59,400 observations; contains status group labels
+- Test-set: 14,850 observations, 40 variables
+
+You can download the datasets [here](https://www.drivendata.org/competitions/7/pump-it-up-data-mining-the-water-table/page/23/). 
+
+Additionaly, we used SQL to join the Training-set-values and Training-set-labels to make the Joined_values_labels csv to make plotting easier on Tableau.
 
 ## Pipeline
-We've created a Class to organize our modeling process and allow quick use of our chosen pipeline objects. This class performs our train test split, to make sure all models are consistent with each other, and also has an optional default preprocessor to make it easier to keep track of how data is being manipulated in each model pipeline. We also have an evaluation report method and permutation importance method to assess our best performing models. We're able to quickly select and train models, and compare them this way. The Class also includes logging functionality to make it easier to preserve modeling information.
+We created a Class to organize our modeling process and allow quick use of our chosen pipeline objects. This class performs our train test split, to make sure all models are consistent with each other, and also has an optional default preprocessor to make it easier to keep track of how data is being manipulated in each model pipeline. We also have an evaluation report method and permutation importance method to assess our best performing models. We're able to quickly select and train models, and compare them this way. The Class also includes logging functionality to make it easier to preserve modeling information.
 
 ## Modeling
 
@@ -36,7 +44,7 @@ We created based on the mean permutation feature importances of our best model. 
 These have the highest percentage of functional wells out of the available options for each feature.
 
 ## Repository Structure
-
+```
 * [data/](./Tanzania-Well-Project/data)
   * [Joined_values_labels.csv](./Tanzania-Well-Project/data/Joined_values_labels.csv)
   * [SubmissionFormat.csv](./Tanzania-Well-Project/data/SubmissionFormat.csv)
@@ -54,6 +62,6 @@ These have the highest percentage of functional wells out of the available optio
 * [ModelClass.py](./Tanzania-Well-Project/ModelClass.py)
 * [PlottingNotebook.ipynb](./Tanzania-Well-Project/PlottingNotebook.ipynb)        ~Just for plotting from both model notebooks
 * [README.md](./Tanzania-Well-Project/README.md)
-
+```
 
 **Authors:** Grace Arina, Nathaniel Martin, Valeria Viscarra Fossati
