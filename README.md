@@ -44,7 +44,7 @@ We created based on the mean permutation feature importances of our best model. 
 These have the highest percentage of functional wells out of the available options for each feature.
 
 ## Repository Structure
-```
+
 * [data/](./Tanzania-Well-Project/data)
   * [Joined_values_labels.csv](./Tanzania-Well-Project/data/Joined_values_labels.csv)
   * [SubmissionFormat.csv](./Tanzania-Well-Project/data/SubmissionFormat.csv)
@@ -62,6 +62,6 @@ These have the highest percentage of functional wells out of the available optio
 * [ModelClass.py](./Tanzania-Well-Project/ModelClass.py)
 * [PlottingNotebook.ipynb](./Tanzania-Well-Project/PlottingNotebook.ipynb)        ~Just for plotting from both model notebooks
 * [README.md](./Tanzania-Well-Project/README.md)
-```
+
 
 **Authors:** Grace Arina, Nathaniel Martin, Valeria Viscarra Fossati
