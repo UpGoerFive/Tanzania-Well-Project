@@ -2,16 +2,20 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import logging
+import pickle
+from joblib import dump, load
+import pathlib
 import time
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
+from sklearn.preprocessing import OneHotEncoder, FunctionTransformer, LabelEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 # Current version of sklearn is still too old I think, might try to upgrade to use below option
 # from sklearn.experimental import enable_halving_search_cv
 from sklearn.model_selection import train_test_split, cross_val_score, RandomizedSearchCV# ,  HalvingRandomSearchCV
 from sklearn.compose import ColumnTransformer, make_column_selector
-
+import sklearn.metrics as metrics
+from sklearn.inspection import permutation_importance
 #########################Valeria###########################
 
 
@@ -22,13 +26,13 @@ from sklearn.compose import ColumnTransformer, make_column_selector
 
 #########################Nathaniel#########################
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # Create handlers
 c_handler = logging.StreamHandler()
 f_handler = logging.FileHandler('model-run.log')
-c_handler.setLevel(logging.DEBUG)
-f_handler.setLevel(logging.DEBUG)
+c_handler.setLevel(logging.INFO)
+f_handler.setLevel(logging.INFO)
 
 # Create formatters and add it to handlers
 c_format = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
@@ -56,25 +60,25 @@ class Modeler:
     to True for single runs, and False for multiple runs.
     """
     def __init__(self, models={}, X=pd.DataFrame(), y=pd.DataFrame()):
-        self._models=models
+        self._models = {}
         self._tuning = {}
 
-        for name in self._models:
-            if not self._models[name]['preprocessor']:
-                self._models[name]['preprocessor'] = self.create_default_prep()
-            self._models[name]['output'] = None
-            self._models[name]['fit_classifier'] = None
+        if X.empty or y.empty:
+            raise Exception('X and y should be provided at start.')
 
-        if not X.empty and not y.empty:
-            self._X_train, self._X_test, self._y_train, self._y_test = train_test_split(X, y, test_size=0.25, random_state = 829941045)
-        else:
-            self._X_train, self._X_test, self._y_train, self._y_test = None, None, None, None
+        self._le = LabelEncoder()
+        self._X_train, self._X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state = 829941045)
+        self._y_train = self._le.fit_transform(y_train.iloc[:, 1])
+        self._y_test = self._le.transform(y_test.iloc[:, 1])
+        for key, value in models.items():
+                    self.add_model(key, value)
 
     def create_default_prep(self, cat_add=None, num_add=None):
         """
         Creates a default preprocessing object, uses all columns and imputes with median for numeric and 'missing' for categorical.
         Can accept extra steps with cat_add and num_add, which must be lists of tuples (steps). Currently only adds them to the order.
         """
+
         def to_object(x):
             return pd.DataFrame(x).astype(str)
 
@@ -105,11 +109,9 @@ class Modeler:
             )
 
         preprocessor = ColumnTransformer(
-                            transformers=[
-                                ("numeric", numeric_transformer, make_column_selector(dtype_include=np.number)),
-                                ("categorical", categorical_transformer, make_column_selector(dtype_exclude=np.number))
-                            ]
-                        )
+                                transformers=[
+                                    ("numeric", numeric_transformer, make_column_selector(dtype_include=np.number)),
+                                    ("categorical", categorical_transformer, make_column_selector(dtype_exclude=np.number))])
 
         return preprocessor
 
@@ -120,11 +122,15 @@ class Modeler:
         the 'preprocessor' key must still be provided.
         """
         if not model['preprocessor']:
-                model['preprocessor'] = self.create_default_prep()
+                preprocessor = self.create_default_prep()
+        else:
+            preprocessor = model['preprocessor']
 
         self._models[name] = model
-        self._models[name]['output'] = None
-        self._models[name]['fit_classifier'] = None
+
+        if 'model_pipeline' not in model.keys():
+            self._models[name]['model_pipeline'] = Pipeline(steps=[('preprocessor', preprocessor),
+                                                                    ('classifier', self._models[name]['classifier'])])
 
     def remove_model(self, name):
         """
@@ -151,56 +157,66 @@ class Modeler:
         """
         return self._models[name]
 
-    def train_model(self, name, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=True, cv=True, train=True):
+    def model_pickler(self, name, filename):
+        """
+        Pickles model to filename.
+        """
+        model=self._models[name]
+        with open(filename, mode='wb') as out_file:
+            dump(model, out_file)
+
+    def model_unpickler(self, name, filename):
+        """
+        Unpickles model and adds to model dictionary, also returns model.
+        """
+        with open(filename, mode='rb') as in_file:
+            model = load(in_file)
+
+        self.add_model(name, model)
+        return model
+
+    def train_model(self, name, print=True, cv=True, train=True):
         """
         Train a single model. Fits all preprocessing transformers for later testing.
-        Records and outputs cross validate scores. The cv_only option determines if the method will 
+        Records and outputs cross validate scores. The cv_only option determines if the method will
         fit a classifier, which is required before testing. Optional printing ability.
         """
         if print:
             logger.addHandler(c_handler)
 
-        if X_train.empty:
-            X_train = self._X_train
-        if y_train.empty:
-            y_train = np.array(self._y_train).ravel()
+        X_train = self._X_train
+        y_train = self._y_train
         model = self._models[name]
-
-        X_train_processed = model['preprocessor'].fit_transform(X_train)
-
-        if train:
-            model['fit_classifier'] = model['classifier'].fit(X_train_processed, y_train)
-            logger.info(f"{name} has been fit.")
-            self._models[name]['time_fit'] = time.asctime()
+        model_pipeline = model['model_pipeline']
 
         if cv:
-            model['output'] = cross_val_score(
-                estimator=model['classifier'],
-                X=X_train_processed,
+            model['cv_output'] = cross_val_score(
+                estimator=model_pipeline,
+                X=X_train,
                 y=y_train
             )
-            logger.info(f"Cross validate scores for {name}: {model['output']}")
+            logger.info(f"Cross validate scores for {name}: {model['cv_output']}")
             self._models[name]['time_cross_val'] = time.asctime()
+
+        if train:
+            model_pipeline = model_pipeline.fit(X_train, y_train)
+            logger.info(f"{name} has been fit.")
+            self._models[name]['time_fit'] = time.asctime()
 
         if print:
             logger.removeHandler(c_handler)
 
-    def train_all(self, X_train=pd.DataFrame(), y_train=pd.DataFrame(), print=False, cv=True, train=True):
+    def train_all(self, print=False, cv=True, train=True):
         """
         Train all available models. Fits all preprocessing transformers for later testing.
-        Records and outputs cross validate scores. The cv_only option determines if the method will 
+        Records and outputs cross validate scores. The cv_only option determines if the method will
         fit a classifier, which is required before testing. Optional printing ability.
         """
 
-        if X_train.empty:
-            X_train = self._X_train
-        if y_train.empty:
-            y_train = self._y_train
-
         for model in self._models:
-            self.train_model(model, X_train, y_train, print, cv, train)
+            self.train_model(model, print, cv, train)
 
-    def test_model(self, name, X_test=pd.DataFrame(), y_test=pd.DataFrame(), print=True):
+    def test_model(self, name, print=True):
         """
         Test a single model. Uses already fitted preprocessor pipeline and classifier.
         Raises an exception if there is no fit classifier for the model. Optional printing.
@@ -208,37 +224,26 @@ class Modeler:
         if print:
             logger.addHandler(c_handler)
 
-        if X_test.empty:
-            X_test = self._X_test
-        if y_test.empty:
-            y_test = np.array(self._y_test).ravel()
+        X_test = self._X_test
+        y_test = self._y_test
         model = self._models[name]
+        model_pipeline = model['model_pipeline']
 
-        X_test_processed = model['preprocessor'].transform(X_test)
-
-        if not model['fit_classifier']: # Should add auto train fitting
-            raise Exception("This model has not been fit yet.")
-
-        model['test_output'] = model['fit_classifier'].score(X_test_processed, y_test)
+        model['test_output'] = model_pipeline.score(X_test, y_test)
         self._models[name]['time_tested'] = time.asctime()
         logger.info(f"{name} test score: {model['test_output']}")
 
         if print:
             logger.removeHandler(c_handler)
 
-    def test_all(self, X_test=pd.DataFrame(), y_test=pd.DataFrame(), print=False):
+    def test_all(self, print=False):
         """
         Test all available models. Uses already fitted preprocessor pipelines and classifiers.
         Raises an exception if there is no fit classifier for a model. Optional printing.
         """
 
-        if X_test.empty:
-            X_test = self._X_test
-        if y_test.empty:
-            y_test = self._y_test
-
         for model in self._models:
-            self.test_model(model, X_test, y_test, print)
+            self.test_model(model, print)
 
     def hyper_search(self, name, searcher=RandomizedSearchCV, params=None, searcher_kwargs=None, print=False, set_to_train=False):
         """
@@ -248,25 +253,28 @@ class Modeler:
 
             searcher_kwargs = {'n_jobs': 3, 'refit': True, 'cv': 10}
 
-        The keys need to be the exact arguments of the object. Note that this should not include things like 
+        The keys need to be the exact arguments of the object. Note that this should not include things like
         param_distributions, as this should be filled in the params argument.
         """
         if print:
             logger.addHandler(c_handler)
 
+        model = self._models[name]
+        model_pipeline = model['model_pipeline']
+
         if not params and 'param_distro' in self._models[name].keys():
             params = self._models[name]['param_distro']
         elif params:
+            params = {'classifier__' + key: value for key, value in params.items()}
             self._models[name]['param_distro'] = params
 
         if searcher_kwargs:
-            search_object = searcher(self._models[name]['classifier'], params, **searcher_kwargs)
+            search_object = searcher(model_pipeline, params, **searcher_kwargs)
         else:
-            search_object = searcher(self._models[name]['classifier'], params)
-        
-        X_train_processed = self._models[name]['preprocessor'].fit_transform(self._X_train)
-        search_object.fit(X_train_processed, np.array(self._y_train).ravel())
-        logger.info(f"For model {name}, {searcher} with{params} produced:")
+            search_object = searcher(model_pipeline, params)
+
+        search_object.fit(self._X_train, self._y_train)
+        logger.info(f"For model {name}, {searcher.__name__} with{params} produced:")
         logger.info(f"Params: {search_object.best_params_}")
         logger.info(f"{search_object.best_score_}" if 'refit' not in searcher_kwargs.keys() else "refit = False")
 
@@ -275,22 +283,109 @@ class Modeler:
         self._models[name]['search_performed_at'] = time.asctime()
 
         if set_to_train:
-            self._models[name]['fit_classifier'] = search_object.best_estimator_
-            self._models[name]['time_fit'] = time.asctime()
+            model['model_pipeline']= search_object.best_estimator_
+            model['time_fit'] = time.asctime()
 
         if print:
             logger.removeHandler(c_handler)
 
+    def model_evaluation(self, name, normalize="true", cmap="Purples", label=""):
+        """
+        Evaluates a classifier model by providing
+            [1] Metrics including accuracy and cross validation score.
+            [2] Classification report
+            [3] Confusion Matrix
+        Args:
+            name (string): classifier model name
+            normalize (str): "true" if normalize confusion matrix annotated values.
+            cmap (str): color map for the confusion matrix
+            label (str): name of the classifier.
+        Returns:
+            report: classfication report
+            fig, ax: matplotlib object
+        """
 
-    def plot_models(self, sns_style='darkgrid', sns_context='talk', palette='coolwarm', save=None):
+        # If the model hasn't been trained and tested yet, let's do that.
+        if 'test_output' not in self._models[name].keys() or 'train_output' not in self._models[name].keys():
+            self.train_model(name, print=False)
+            self.test_model(name, print=False)
+
+        model = self._models[name]
+        model_pipeline = model['model_pipeline']
+
+        X_test = self._X_test
+        y_test = self._y_test
+
+        ## Get Predictions
+        y_hat_test = model_pipeline.predict(X_test)
+
+        ## Classification Report / Scores
+        table_header = "[i] CLASSIFICATION REPORT"    ## Add Label if given
+        if len(label)>0:
+            table_header += f" {label}"
+        ## PRINT CLASSIFICATION REPORT
+        dashes = "---"*20
+        print(dashes,table_header,dashes,sep="\n")
+        print("Train Accuracy : ", round(self._models[name]['train_output'],4))
+        print("Test Accuracy : ", round(self._models[name]['test_output'],4))
+
+        if 'cv_output' in model.keys():
+            print('CV score (n=5)', round(np.mean(self._models[name]['cv_output']), 4))
+        print(dashes+"\n")
+
+        y_label_test = self._le.inverse_transform(y_test)
+        y_label_hat_test = self._le.inverse_transform(y_hat_test)
+        print(metrics.classification_report(y_label_test, y_label_hat_test, target_names=self._le.classes_))
+        model['report'] = metrics.classification_report(y_label_test, y_label_hat_test, target_names=self._le.classes_, output_dict=True)
+        print(dashes+"\n\n")
+        ## MAKE FIGURE
+        fig, ax = plt.subplots(figsize=(10,4))
+        ax.grid(False)
+        ## Plot Confusion Matrix
+        metrics.plot_confusion_matrix(model_pipeline, X_test,y_test,
+                                    display_labels=self._le.classes_,
+                                    normalize=normalize,
+                                    cmap=cmap,ax=ax)
+        ax.set(title="Confusion Matrix")
+        plt.xticks(rotation=45)
+        plt.show()
+        return fig, ax
+
+    def permutation_importance(self, name, train=False, perm_kwargs=None, save_graph=None):
+        """
+        Graphs and returns permutation importance of a model. Can be run on test or train data with the train
+        option. If providing perm_kwargs, they should be in a dictionary of keys that correspond to the
+        permutation importance function parameters.
+        """
+        model = self._models[name]
+        model_pipeline = model['model_pipeline']
+
+        X_val, y_val = (self._X_train, self._y_train) if train else (self._X_test, self._y_test)
+
+        model_permuter = permutation_importance(model_pipeline, X_val, y_val, **perm_kwargs) if perm_kwargs else permutation_importance(model_pipeline, X_val, y_val)
+        model['permuter'] = model_permuter
+
+        # Plotting
+        fig, ax = plt.subplots(figsize=(10,4))
+        perm_imp = pd.Series(model_permuter.importances_mean, index=X_val.columns).sort_values(ascending=False)[:10]
+        perm_imp.plot(kind="barh", title="Permutation Importances")
+        ax.set(ylabel="Mean Permutation Importance Score")
+        ax.invert_yaxis()
+
+        if save_graph:
+            plt.savefig(save_graph)
+        logger.info(f"Model {name} has permutation importances of {perm_imp}")
+
+    def plot_models(self, sns_style='darkgrid', sns_context='talk', palette='coolwarm', save=None, labels=None):
         """
         Skylar slide style, with thanks to Matt. Has options for seaborn plotting. If you want to save the plot,
-        give the save option a filename, exactly as would be done with plt.savefig()
+        give the save option a filename, exactly as would be done with plt.savefig() Labels must be provided as a
+        dictionary with the model names as keys and the Label you'd like to display as a value.
         """
         logger.removeHandler(c_handler)
         logger.removeHandler(f_handler)
 
-        xticklabels = list(self._models.keys())
+        xticklabels = [labels[key] for key in self._models.keys()] if labels else list(self._models.keys())
         y = [model['test_output'] for model in self._models.values()]
 
         sns.set_style(sns_style)
@@ -315,7 +410,6 @@ class Modeler:
 
         if save:
             plt.savefig(save)
-        
+
         logger.addHandler(c_handler)
         logger.addHandler(f_handler)
-
