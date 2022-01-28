@@ -2,6 +2,9 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import logging
+import pickle
+from joblib import dump, load
+import pathlib
 import time
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer, LabelEncoder
@@ -57,27 +60,25 @@ class Modeler:
     to True for single runs, and False for multiple runs.
     """
     def __init__(self, models={}, X=pd.DataFrame(), y=pd.DataFrame()):
-        self._models=models
+        self._models = {}
         self._tuning = {}
 
-        for name in self._models:
-            if not self._models[name]['preprocessor']:
-                self._models[name]['preprocessor'] = self.create_default_prep()
-            self._models[name]['fit_classifier'] = None
-
-        if not X.empty and not y.empty:
-            self._le = LabelEncoder()
-            self._X_train, self._X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state = 829941045)
-            self._y_train = self._le.fit_transform(y_train.iloc[:, 1])
-            self._y_test = self._le.transform(y_test.iloc[:, 1])
-        else:
+        if X.empty or y.empty:
             raise Exception('X and y should be provided at start.')
+
+        self._le = LabelEncoder()
+        self._X_train, self._X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state = 829941045)
+        self._y_train = self._le.fit_transform(y_train.iloc[:, 1])
+        self._y_test = self._le.transform(y_test.iloc[:, 1])
+        for key, value in models.items():
+                    self.add_model(key, value)
 
     def create_default_prep(self, cat_add=None, num_add=None):
         """
         Creates a default preprocessing object, uses all columns and imputes with median for numeric and 'missing' for categorical.
         Can accept extra steps with cat_add and num_add, which must be lists of tuples (steps). Currently only adds them to the order.
         """
+
         def to_object(x):
             return pd.DataFrame(x).astype(str)
 
@@ -108,11 +109,9 @@ class Modeler:
             )
 
         preprocessor = ColumnTransformer(
-                            transformers=[
-                                ("numeric", numeric_transformer, make_column_selector(dtype_include=np.number)),
-                                ("categorical", categorical_transformer, make_column_selector(dtype_exclude=np.number))
-                            ]
-                        )
+                                transformers=[
+                                    ("numeric", numeric_transformer, make_column_selector(dtype_include=np.number)),
+                                    ("categorical", categorical_transformer, make_column_selector(dtype_exclude=np.number))])
 
         return preprocessor
 
@@ -123,12 +122,15 @@ class Modeler:
         the 'preprocessor' key must still be provided.
         """
         if not model['preprocessor']:
-                model['preprocessor'] = self.create_default_prep()
+                preprocessor = self.create_default_prep()
+        else:
+            preprocessor = model['preprocessor']
 
         self._models[name] = model
-        self._models[name]['fit_classifier'] = None
-        self._models[name]['model_pipeline'] = Pipeline(steps=[('preprocessor', self._models[name]['preprocessor']),
-                                                                ('classifier', self._models[name]['classifier'])])
+
+        if 'model_pipeline' not in model.keys():
+            self._models[name]['model_pipeline'] = Pipeline(steps=[('preprocessor', preprocessor),
+                                                                    ('classifier', self._models[name]['classifier'])])
 
     def remove_model(self, name):
         """
@@ -155,6 +157,24 @@ class Modeler:
         """
         return self._models[name]
 
+    def model_pickler(self, name, filename):
+        """
+        Pickles model to filename.
+        """
+        model=self._models[name]
+        with open(filename, mode='wb') as out_file:
+            dump(model, out_file)
+
+    def model_unpickler(self, name, filename):
+        """
+        Unpickles model and adds to model dictionary, also returns model.
+        """
+        with open(filename, mode='rb') as in_file:
+            model = load(in_file)
+
+        self.add_model(name, model)
+        return model
+
     def train_model(self, name, print=True, cv=True, train=True):
         """
         Train a single model. Fits all preprocessing transformers for later testing.
@@ -167,23 +187,21 @@ class Modeler:
         X_train = self._X_train
         y_train = self._y_train
         model = self._models[name]
-
-        X_train_processed = model['preprocessor'].fit_transform(X_train)
-
-        if train:
-            model['fit_classifier'] = model['classifier'].fit(X_train_processed, y_train)
-            model['train_output'] = model['fit_classifier'].score(X_train_processed, y_train)
-            logger.info(f"{name} has been fit.")
-            self._models[name]['time_fit'] = time.asctime()
+        model_pipeline = model['model_pipeline']
 
         if cv:
             model['cv_output'] = cross_val_score(
-                estimator=model['classifier'],
-                X=X_train_processed,
+                estimator=model_pipeline,
+                X=X_train,
                 y=y_train
             )
             logger.info(f"Cross validate scores for {name}: {model['cv_output']}")
             self._models[name]['time_cross_val'] = time.asctime()
+
+        if train:
+            model_pipeline = model_pipeline.fit(X_train, y_train)
+            logger.info(f"{name} has been fit.")
+            self._models[name]['time_fit'] = time.asctime()
 
         if print:
             logger.removeHandler(c_handler)
@@ -209,13 +227,9 @@ class Modeler:
         X_test = self._X_test
         y_test = self._y_test
         model = self._models[name]
+        model_pipeline = model['model_pipeline']
 
-        X_test_processed = model['preprocessor'].transform(X_test)
-
-        if not model['fit_classifier']: # Should add auto train fitting
-            raise Exception("This model has not been fit yet.")
-
-        model['test_output'] = model['fit_classifier'].score(X_test_processed, y_test)
+        model['test_output'] = model_pipeline.score(X_test, y_test)
         self._models[name]['time_tested'] = time.asctime()
         logger.info(f"{name} test score: {model['test_output']}")
 
@@ -245,19 +259,22 @@ class Modeler:
         if print:
             logger.addHandler(c_handler)
 
+        model = self._models[name]
+        model_pipeline = model['model_pipeline']
+
         if not params and 'param_distro' in self._models[name].keys():
             params = self._models[name]['param_distro']
         elif params:
+            params = {'classifier__' + key: value for key, value in params.items()}
             self._models[name]['param_distro'] = params
 
         if searcher_kwargs:
-            search_object = searcher(self._models[name]['classifier'], params, **searcher_kwargs)
+            search_object = searcher(model_pipeline, params, **searcher_kwargs)
         else:
-            search_object = searcher(self._models[name]['classifier'], params)
+            search_object = searcher(model_pipeline, params)
 
-        X_train_processed = self._models[name]['preprocessor'].fit_transform(self._X_train)
-        search_object.fit(X_train_processed, self._y_train)
-        logger.info(f"For model {name}, {searcher} with{params} produced:")
+        search_object.fit(self._X_train, self._y_train)
+        logger.info(f"For model {name}, {searcher.__name__} with{params} produced:")
         logger.info(f"Params: {search_object.best_params_}")
         logger.info(f"{search_object.best_score_}" if 'refit' not in searcher_kwargs.keys() else "refit = False")
 
@@ -266,30 +283,11 @@ class Modeler:
         self._models[name]['search_performed_at'] = time.asctime()
 
         if set_to_train:
-            self._models[name]['fit_classifier'] = search_object.best_estimator_
-            self._models[name]['time_fit'] = time.asctime()
+            model['model_pipeline']= search_object.best_estimator_
+            model['time_fit'] = time.asctime()
 
         if print:
             logger.removeHandler(c_handler)
-
-    def check_preprocessor(self, name, train=True, fit=True, shape_only=False):
-        """
-        Checks how your preprocessor is transforming your data. Defaults to fitting and transforming X train,
-        but can also just transform X train or X test. If fit or train is set to False, the preprocessor must already
-        be fitted.
-        """
-        model = self._models[name]
-
-        if train and fit:
-            processed = model['preprocessor'].fit_transform(self._X_train)
-        elif train:
-            processed = model['preprocessor'].transform(self._X_train)
-        else:
-            processed = model['preprocessor'].transform(self._X_test)
-
-        # Fix and implement later
-        # return pd.DataFrame.sparse.from_spmatrix(processed), processed.shape if not shape_only else processed.shape
-        return processed.shape
 
     def model_evaluation(self, name, normalize="true", cmap="Purples", label=""):
         """
@@ -313,8 +311,7 @@ class Modeler:
             self.test_model(name, print=False)
 
         model = self._models[name]
-        model_pipeline = Pipeline(steps=[('preprocessor', self._models[name]['preprocessor']),
-                                    ('classifier', self._models[name]['fit_classifier'])])
+        model_pipeline = model['model_pipeline']
 
         X_test = self._X_test
         y_test = self._y_test
@@ -361,8 +358,7 @@ class Modeler:
         permutation importance function parameters.
         """
         model = self._models[name]
-        model_pipeline = Pipeline(steps=[('preprocessor', self._models[name]['preprocessor']),
-                                    ('classifier', self._models[name]['fit_classifier'])])
+        model_pipeline = model['model_pipeline']
 
         X_val, y_val = (self._X_train, self._y_train) if train else (self._X_test, self._y_test)
 
@@ -380,15 +376,16 @@ class Modeler:
             plt.savefig(save_graph)
         logger.info(f"Model {name} has permutation importances of {perm_imp}")
 
-    def plot_models(self, sns_style='darkgrid', sns_context='talk', palette='coolwarm', save=None):
+    def plot_models(self, sns_style='darkgrid', sns_context='talk', palette='coolwarm', save=None, labels=None):
         """
         Skylar slide style, with thanks to Matt. Has options for seaborn plotting. If you want to save the plot,
-        give the save option a filename, exactly as would be done with plt.savefig()
+        give the save option a filename, exactly as would be done with plt.savefig() Labels must be provided as a
+        dictionary with the model names as keys and the Label you'd like to display as a value.
         """
         logger.removeHandler(c_handler)
         logger.removeHandler(f_handler)
 
-        xticklabels = list(self._models.keys())
+        xticklabels = [labels[key] for key in self._models.keys()] if labels else list(self._models.keys())
         y = [model['test_output'] for model in self._models.values()]
 
         sns.set_style(sns_style)
