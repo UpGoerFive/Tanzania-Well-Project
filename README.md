@@ -23,7 +23,7 @@ We've created a Class to organize our modeling process and allow quick use of ou
 - Gradient Boosting
 - Cat Boost
 
-We evaluated the accuracy of these models in predicting our target. Ultimately our best performing model was (Model) with an accuracy of (Score). This achieved through hyper parameter tuning with RandomizedSearchCV in SciKit-Learn.
+We evaluated the accuracy of these models in predicting our target. Ultimately our best performing model was a tuned Gradient Boost with an accuracy of around 81%. This was achieved through hyper parameter tuning with RandomizedSearchCV in SciKit-Learn.
 
 ## Recommendations
 
@@ -39,6 +39,20 @@ These have the highest percentage of functional wells out of the available optio
 
 ## Repository Structure
 
-3
+
+* [data/](./Tanzania-Well-Project/data)
+  * [Joined_values_labels.csv](./Tanzania-Well-Project/data/Joined_values_labels.csv)
+  * [SubmissionFormat.csv](./Tanzania-Well-Project/data/SubmissionFormat.csv)
+  * [Test-set-values.csv](./Tanzania-Well-Project/data/Test-set-values.csv)
+  * [Training-set-labels.csv](./Tanzania-Well-Project/data/Training-set-labels.csv)
+  * [Training-set-values.csv](./Tanzania-Well-Project/data/Training-set-values.csv)
+* [Baseline Models.ipynb](./Tanzania-Well-Project/Baseline Models.ipynb)
+* [EDA.ipynb](./Tanzania-Well-Project/EDA.ipynb)
+* [Join Labels & Values.ipynb](./Tanzania-Well-Project/Join Labels & Values.ipynb)
+* [PlottingNotebook.ipynb](./Tanzania-Well-Project/PlottingNotebook.ipynb)
+* [README.md](./Tanzania-Well-Project/README.md)
+* [REVIEW_BaselineModels.ipynb](./Tanzania-Well-Project/REVIEW_BaselineModels.ipynb)
+* [ourfunctions.py](./Tanzania-Well-Project/ourfunctions.py)
+
 
 **Authors:** Grace Arina, Nathaniel Martin, Valeria Viscarra Fossati

@@ -2,9 +2,6 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import logging
-import pickle
-from joblib import dump, load
-import pathlib
 import time
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer, LabelEncoder
@@ -156,24 +153,6 @@ class Modeler:
         Access a model to use.
         """
         return self._models[name]
-
-    def model_pickler(self, name, filename):
-        """
-        Pickles model to filename.
-        """
-        model=self._models[name]
-        with open(filename, mode='wb') as out_file:
-            dump(model, out_file)
-
-    def model_unpickler(self, name, filename):
-        """
-        Unpickles model and adds to model dictionary, also returns model.
-        """
-        with open(filename, mode='rb') as in_file:
-            model = load(in_file)
-
-        self.add_model(name, model)
-        return model
 
     def train_model(self, name, print=True, cv=True, train=True):
         """
