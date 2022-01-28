@@ -27,18 +27,15 @@ We evaluated the accuracy of these models in predicting our target. Ultimately o
 
 ## Recommendations
 
-The mean feature importance averages of our model are given here:
+We created based on the mean permutation feature importances of our best model. We're recommending a focus on waterpoint_type, extraction_type, and payment_type as these are both important for prediction, and also controllable by the Government of Tanzania. Specifically we recommend:
 
-We're recommending a focus on waterpoint_type, extraction_type, and payment_type as these are both important for prediction, and also controllable by the Government of Tanzania. Specifically we recommend:
-
-- Building primarily single communal standpipes
-- point 2
-- point 3
+- Building and maintaining primarily single communal standpipes
+- Building and maintaining primarily gravity wells
+- Charging annually or monthly
 
 These have the highest percentage of functional wells out of the available options for each feature.
 
 ## Repository Structure
-
 
 * [data/](./Tanzania-Well-Project/data)
   * [Joined_values_labels.csv](./Tanzania-Well-Project/data/Joined_values_labels.csv)
@@ -46,13 +43,17 @@ These have the highest percentage of functional wells out of the available optio
   * [Test-set-values.csv](./Tanzania-Well-Project/data/Test-set-values.csv)
   * [Training-set-labels.csv](./Tanzania-Well-Project/data/Training-set-labels.csv)
   * [Training-set-values.csv](./Tanzania-Well-Project/data/Training-set-values.csv)
-* [Baseline Models.ipynb](./Tanzania-Well-Project/Baseline Models.ipynb)
+* [presentation-items/](./Tanzania-Well-Project/presentation-items)
+  * [Inferential Plots.twb](<./Tanzania-Well-Project/presentation-items/Inferential Plots.twb>)
+  * [Model-Performance.png](./Tanzania-Well-Project/presentation-items/Model-Performance.png)
+  * [Tanzania Well Project.pdf](<./Tanzania-Well-Project/presentation-items/Tanzania Well Project.pdf>)
+* [.gitignore](./Tanzania-Well-Project/.gitignore)
+* [BaselineModels.ipynb](./Tanzania-Well-Project/BaselineModels.ipynb)        ~Our Non-Boosted Models
+* [BoostModels.ipynb](./Tanzania-Well-Project/BoostModels.ipynb)        ~Our Boosted Models
 * [EDA.ipynb](./Tanzania-Well-Project/EDA.ipynb)
-* [Join Labels & Values.ipynb](./Tanzania-Well-Project/Join Labels & Values.ipynb)
-* [PlottingNotebook.ipynb](./Tanzania-Well-Project/PlottingNotebook.ipynb)
+* [ModelClass.py](./Tanzania-Well-Project/ModelClass.py)
+* [PlottingNotebook.ipynb](./Tanzania-Well-Project/PlottingNotebook.ipynb)        ~Just for plotting from both model notebooks
 * [README.md](./Tanzania-Well-Project/README.md)
-* [REVIEW_BaselineModels.ipynb](./Tanzania-Well-Project/REVIEW_BaselineModels.ipynb)
-* [ourfunctions.py](./Tanzania-Well-Project/ourfunctions.py)
 
 
 **Authors:** Grace Arina, Nathaniel Martin, Valeria Viscarra Fossati
