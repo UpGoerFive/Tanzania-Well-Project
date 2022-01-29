@@ -184,7 +184,6 @@ class Modeler:
         Records and outputs cross validate scores. The cv_only option determines if the method will
         fit a classifier, which is required before testing. Optional printing ability.
         """
-
         for model in self._models:
             self.train_model(model, print, cv, train)
 
@@ -248,7 +247,7 @@ class Modeler:
         search_object.fit(self._X_train, self._y_train)
         logger.info(f"For model {name}, {searcher.__name__} with{params} produced:")
         logger.info(f"Params: {search_object.best_params_}")
-        logger.info(f"{search_object.best_score_}" if 'refit' not in searcher_kwargs.keys() else "refit = False")
+        logger.info(f"The mean cross validated score of the best estimator was :{search_object.best_score_}" if 'refit' not in searcher_kwargs.keys() else "refit = False")
 
         self._models[name]['search_classifier'] = search_object.best_estimator_ if 'refit' not in searcher_kwargs.keys() else None
         self._models[name]['search_best_params'] = search_object.best_params_
@@ -256,6 +255,7 @@ class Modeler:
 
         if set_to_train:
             model['model_pipeline']= search_object.best_estimator_
+            model['train_output'] = model['model_pipeline'].score(self._X_train, self._y_train)
             model['time_fit'] = time.asctime()
 
         if print:
@@ -278,8 +278,10 @@ class Modeler:
         """
 
         # If the model hasn't been trained and tested yet, let's do that.
-        if 'test_output' not in self._models[name].keys() or 'train_output' not in self._models[name].keys():
+        if 'train_output' not in self._models[name].keys():
             self.train_model(name, print=False)
+            self.test_model(name, print=False)
+        elif 'test_output' not in self._models[name].keys(): # No sense training if we don't have to.
             self.test_model(name, print=False)
 
         model = self._models[name]
