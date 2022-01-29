@@ -171,6 +171,7 @@ class Modeler:
 
         if train:
             model_pipeline = model_pipeline.fit(X_train, y_train)
+            model['train_ouput'] = model_pipeline.score(X_train, y_train)
             logger.info(f"{name} has been fit.")
             self._models[name]['time_fit'] = time.asctime()
 
@@ -369,14 +370,7 @@ class Modeler:
         ax.set(ylim=(0, 1))
         ax.set_xticklabels(ax.get_xticklabels(), rotation=45, horizontalalignment='right')
 
-        # ax2 = ax.twinx()
-        # sns.lineplot(x=xticklabels, y=x_error, linewidth=5)
-        # ax2.set(ylim=(0, 300000))
-        # ax2.set_yticks(np.linspace(0,300000,num=6))
-        # ax2.set_yticklabels(np.linspace(0,300,num=6,dtype=int))
-
         ax.set_ylabel('Accuracy Score')
-        # ax2.set_ylabel('Error, USD (thousands)')
         ax.set_title('Model Effectiveness');
 
         if save:
