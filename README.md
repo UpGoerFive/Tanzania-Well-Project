@@ -9,13 +9,18 @@ The purpose of this project is to use Machine Learning Classification models to 
 The hope is that by gaining a better understanding of the factors that impact water wells, we are able to improve maintenance and ensure all wells stay functional.  The importance of having accessibility of water for these Tanzanian communities is that it decreases diseases, increases education, and increases the economy overall.
 
 ## Data
-The data that was used to train our models was provided by Taarifa and the Tanzanian Ministry of Water. 
+The data that was used to train our models was provided by Taarifa and the Tanzanian Ministry of Water.
 The data sets are as follow:
 - Training-set-values: 59,400 observations, 40 variables
 - Training-set-labels: 59,400 observations; contains status group labels
+
+We perform a train test split on this set in order to properly test our models on previously unseen data.
+
 - Test-set: 14,850 observations, 40 variables
 
-You can download the datasets [here](https://www.drivendata.org/competitions/7/pump-it-up-data-mining-the-water-table/page/23/). 
+This is provided by the competition website to generate predictions on, and rank the outputs.
+
+You can download the datasets [here](https://www.drivendata.org/competitions/7/pump-it-up-data-mining-the-water-table/page/23/).
 
 Additionaly, we used SQL to join the Training-set-values and Training-set-labels to make the Joined_values_labels csv to make plotting easier on Tableau.
 
